@@ -126,5 +126,105 @@ export class HttpClientCurrent {
             );
         }
     }
+	
+	const networkRequestViaProxy = (
+    destinationUrlString,
+    proxyUrlString,
+    httpMethod,
+    options,
+    agentOptions,
+    timeout
+) => {
+    const destinationUrl = new URL(destinationUrlString);
+    const proxyUrl = new URL(proxyUrlString);
+
+    const headers = options?.headers || {};
+    const tunnelRequestOptions = {
+        host: proxyUrl.hostname,
+        port: proxyUrl.port,
+        method: "CONNECT",
+        path: destinationUrl.hostname,
+        headers: headers,
+    };
+
+    if (timeout) {
+        tunnelRequestOptions.timeout = timeout;
+    }
+
+    if (agentOptions && Object.keys(agentOptions).length) {
+        tunnelRequestOptions.agent = new http.Agent(agentOptions);
+    }
+
+    let postRequestStringContent = "";
+    if (httpMethod === "POST") {
+        const body = options?.body || "";
+        postRequestStringContent =
+            "Content-Type: application/x-www-form-urlencoded\r\n" +
+            `Content-Length: ${body.length}\r\n` +
+            `\r\n${body}`;
+    }
+    const outgoingRequestString =
+        `${httpMethod.toUpperCase()} ${destinationUrl.href} HTTP/1.1\r\n` +
+        `Host: ${destinationUrl.host}\r\n` +
+        "Connection: close\r\n" +
+        postRequestStringContent +
+        "\r\n";
+
+    return new Promise((resolve, reject) => {
+        const request = http.request(tunnelRequestOptions);
+
+        if (tunnelRequestOptions.timeout) {
+            request.on("timeout", () => {
+                request.destroy();
+                reject(new Error("Request time out"));
+            });
+        }
+
+        request.end();
+
+        request.on("connect", (response, socket) => {
+            const proxyStatusCode =
+                response?.statusCode || 500; // Assuming 500 as ProxyStatus.SERVER_ERROR
+            if (
+                proxyStatusCode < 200 ||
+                proxyStatusCode > 299
+            ) {
+                request.destroy();
+                socket.destroy();
+                reject(
+                    new Error(
+                        `Error connecting to proxy. Http status code: ${response.statusCode}. Http status message: ${response?.statusMessage || "Unknown"}`
+                    )
+                );
+            }
+            if (tunnelRequestOptions.timeout) {
+                socket.setTimeout(tunnelRequestOptions.timeout);
+                socket.on("timeout", () => {
+                    request.destroy();
+                    socket.destroy();
+                    reject(new Error("Request time out"));
+                });
+            }
+
+            socket.write(outgoingRequestString);
+
+            const data = [];
+            socket.on("data", (chunk) => {
+                data.push(chunk);
+            });
+
+            socket.on("end", () => {
+                const dataString = Buffer.concat(data).toString();
+                const dataStringArray = dataString.split("\r\n");
+                const httpStatusCode = parseInt(
+                    dataStringArray[0].split(" ")[1]
+                );
+                // Further processing can be done here
+            });
+        });
+    });
+};
+
+
 }
 
