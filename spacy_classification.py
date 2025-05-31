@@ -12,7 +12,7 @@ raw_categories = {
     "personal": ["birthday", "party", "weekend", "family"]
 }
 
-sample_emails = [
+sample_emails = '''[
 {
     "category": "upi_transaction_failed",
     "subject": "UPI Transaction Failed - Urgent",
@@ -59,7 +59,7 @@ sample_emails = [
     "body": "Congratulations! You have been selected as the lucky winner of our grand lottery. Click here to claim your prize money now."
 }
 
-]
+]'''
 
 # Preprocess keywords: lemmatize them
 def lemmatize_keywords(keywords):
@@ -95,20 +95,24 @@ def classify_emails(email):
 
     return email, best_category if best_score > 0 else "unknown",best_score, matched_keywords
 
-
-for email_data in sample_emails:
+df = pd.read_json(sample_emails)
+for index,email_data in df.iterrows():
+# for email_data in sample_emails:
     # print(email_data)
     email, best_category, best_score, matched_keywords = classify_emails(email_data['body'])
-    results.append({
-      "email": email,
-      "category": best_category,
-      "score": best_score,
-      "matched_keywords": matched_keywords
-  })
+
+    df.at[index, "category"] = best_category
+    df.at[index, "score"] = best_score
+    df.at[index, "matched_keywords"] = (',').join(matched_keywords)
+
+  #   results.append({
+  #     "email": email,
+  #     "category": best_category,
+  #     "score": best_score,
+  #     "matched_keywords": matched_keywords
+  # })
 
 
 # Create DataFrame
-df = pd.DataFrame(results)
-# pd.set_option("display.max_colwidth", None)
-df[['email', 'category', 'score', 'matched_keywords']]
+df[['body', 'category', 'score', 'matched_keywords']]
 df
